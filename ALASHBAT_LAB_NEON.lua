@@ -31,12 +31,20 @@ end
 local S = {
 	lang = "AR", -- "AR" | "EN"
 
-	-- Aim Assist
+	-- Aim Assist & No Recoil
 	aimEnabled = false,
 	aimPart = "Head",
 	aimFov = 140,
 	aimSmooth = 0.22,
-	aimHoldRmb = true,
+	aimBehavior = "HOLD", -- "HOLD" | "TOGGLE"
+	aimKeyId = "RMB",
+	noRecoilEnabled = false,
+	noRecoilStrength = 0.75,
+
+	-- Movement (Speed & Jump)
+	moveEnabled = false,
+	walkSpeed = 28,
+	jumpPower = 75,
 
 	-- ESP & Cham
 	espEnabled = true,
@@ -59,6 +67,45 @@ local S = {
 	teamCheck = true,
 	maxRange = 800
 }
+
+local AIM_KEYS = {
+	{ id = "RMB", label = "RMB (كليك يمين)", en = "RMB (Right Click)", kind = "mouse", code = Enum.UserInputType.MouseButton2 },
+	{ id = "CAPS", label = "CapsLock", en = "CapsLock", kind = "key", code = Enum.KeyCode.CapsLock },
+	{ id = "LSHIFT", label = "LeftShift", en = "LeftShift", kind = "key", code = Enum.KeyCode.LeftShift },
+	{ id = "E", label = "Key [E]", en = "Key [E]", kind = "key", code = Enum.KeyCode.E },
+	{ id = "Q", label = "Key [Q]", en = "Key [Q]", kind = "key", code = Enum.KeyCode.Q },
+	{ id = "F", label = "Key [F]", en = "Key [F]", kind = "key", code = Enum.KeyCode.F },
+	{ id = "LALT", label = "LeftAlt", en = "LeftAlt", kind = "key", code = Enum.KeyCode.LeftAlt },
+	{ id = "MMB", label = "MMB (عجلة الماوس)", en = "MMB (Middle Click)", kind = "mouse", code = Enum.UserInputType.MouseButton3 },
+	{ id = "LMB", label = "LMB (كليك يسار)", en = "LMB (Left Click)", kind = "mouse", code = Enum.UserInputType.MouseButton1 }
+}
+
+local aimToggledState = false
+
+local function getAimKeyInfo()
+	for _, item in ipairs(AIM_KEYS) do
+		if item.id == S.aimKeyId then
+			return item
+		end
+	end
+	return AIM_KEYS[1]
+end
+
+local function isAimKeyDown()
+	local info = getAimKeyInfo()
+	if info.kind == "mouse" then
+		return UserInputService:IsMouseButtonPressed(info.code)
+	end
+	return UserInputService:IsKeyDown(info.code)
+end
+
+local function matchesAimInput(input)
+	local info = getAimKeyInfo()
+	if info.kind == "mouse" then
+		return input.UserInputType == info.code
+	end
+	return input.KeyCode == info.code
+end
 
 local function T(ar, en)
 	return S.lang == "AR" and ar or en
@@ -157,6 +204,58 @@ local function getTargetPlayers()
 		end
 	end
 	return list
+end
+
+-- نظام الحركة (السرعة ومسافة القفز)
+local savedMove = {
+	hum = nil,
+	walkSpeed = nil,
+	jumpPower = nil,
+	jumpHeight = nil,
+	useJumpPower = nil
+}
+
+local function restoreMovement()
+	local hum = savedMove.hum
+	if hum and hum.Parent then
+		pcall(function()
+			if savedMove.walkSpeed then hum.WalkSpeed = savedMove.walkSpeed end
+			if savedMove.useJumpPower ~= nil then hum.UseJumpPower = savedMove.useJumpPower end
+			if savedMove.jumpPower then hum.JumpPower = savedMove.jumpPower end
+			if savedMove.jumpHeight then hum.JumpHeight = savedMove.jumpHeight end
+		end)
+	end
+	savedMove.hum = nil
+	savedMove.walkSpeed = nil
+	savedMove.jumpPower = nil
+	savedMove.jumpHeight = nil
+	savedMove.useJumpPower = nil
+end
+
+local function applyMovement()
+	local char = LocalPlayer.Character
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
+	if not hum or hum.Health <= 0 then return end
+
+	if not S.moveEnabled then
+		restoreMovement()
+		return
+	end
+
+	if savedMove.hum ~= hum then
+		restoreMovement()
+		savedMove.hum = hum
+		savedMove.walkSpeed = hum.WalkSpeed
+		savedMove.useJumpPower = hum.UseJumpPower
+		savedMove.jumpPower = hum.JumpPower
+		savedMove.jumpHeight = hum.JumpHeight
+	end
+
+	pcall(function()
+		hum.WalkSpeed = S.walkSpeed
+		hum.UseJumpPower = true
+		hum.JumpPower = S.jumpPower
+	end)
 end
 
 -- دائرة FOV نيون
@@ -373,7 +472,7 @@ local function applyHitbox()
 	end
 end
 
--- نظام Aim Assist
+-- نظام Aim Assist + No Recoil
 local function getBestAimTarget()
 	Camera = Workspace.CurrentCamera
 	if not Camera then return nil end
@@ -404,6 +503,26 @@ local function getBestAimTarget()
 	end
 
 	return bestPart
+end
+
+local prevCamCFrame = nil
+local function applyNoRecoil(cam)
+	if not S.noRecoilEnabled or not cam then
+		prevCamCFrame = cam and cam.CFrame or nil
+		return
+	end
+
+	local firing = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1)
+	if firing and prevCamCFrame then
+		local curPos = cam.CFrame.Position
+		local prevLook = prevCamCFrame.LookVector
+		local curLook = cam.CFrame.LookVector
+		-- إخماد قفزة الارتداد المفاجئة عند الإطلاق مع إبقاء التحكم الطبيعي متاحاً
+		local stabilizedLook = curLook:Lerp(prevLook, math.clamp(S.noRecoilStrength * 0.45, 0, 0.85)).Unit
+		cam.CFrame = CFrame.lookAt(curPos, curPos + stabilizedLook)
+	end
+
+	prevCamCFrame = cam.CFrame
 end
 
 -- نظام TriggerBot
@@ -447,13 +566,13 @@ local main = Instance.new("Frame")
 main.Name = "NeonPanel"
 main.Active = true
 main.BackgroundColor3 = C.panel
-main.Position = UDim2.new(0.5, -255, 0.5, -195)
-main.Size = UDim2.fromOffset(510, 390)
+main.Position = UDim2.new(0.5, -265, 0.5, -210)
+main.Size = UDim2.fromOffset(530, 420)
 main.ClipsDescendants = true
 main.Parent = screenGui
 corner(main, 12)
 
-local mainStroke = stroke(main, C.neonCyan, 1.6, 0.1)
+stroke(main, C.neonCyan, 1.6, 0.1)
 local mainGrad = Instance.new("UIGradient")
 mainGrad.Color = ColorSequence.new({
 	ColorSequenceKeypoint.new(0, Color3.fromRGB(16, 22, 36)),
@@ -538,7 +657,7 @@ local side = Instance.new("Frame")
 side.BackgroundColor3 = C.bg
 side.BackgroundTransparency = 0.25
 side.Position = UDim2.fromOffset(10, 52)
-side.Size = UDim2.fromOffset(132, 328)
+side.Size = UDim2.fromOffset(136, 358)
 side.BorderSizePixel = 0
 side.Parent = main
 corner(side, 9)
@@ -547,8 +666,8 @@ stroke(side, C.neonCyan, 1, 0.55)
 local content = Instance.new("Frame")
 content.BackgroundColor3 = C.surface
 content.BackgroundTransparency = 0.3
-content.Position = UDim2.fromOffset(152, 52)
-content.Size = UDim2.new(1, -162, 1, -62)
+content.Position = UDim2.fromOffset(156, 52)
+content.Size = UDim2.new(1, -166, 1, -62)
 content.BorderSizePixel = 0
 content.Parent = main
 corner(content, 9)
@@ -569,7 +688,7 @@ local function makePage(key)
 	p.BorderSizePixel = 0
 	p.ScrollBarThickness = 3
 	p.ScrollBarImageColor3 = C.neonCyan
-	p.CanvasSize = UDim2.fromOffset(0, 320)
+	p.CanvasSize = UDim2.fromOffset(0, 340)
 	p.Visible = false
 	p.Parent = content
 	pages[key] = p
@@ -588,6 +707,7 @@ end
 local tabList = {
 	{ "Home", "الكل / الرئيسية", "All / Home" },
 	{ "Aim", "الأيم بوت", "Aim Assist" },
+	{ "Move", "السرعة والقفز", "Movement" },
 	{ "ESP", "الكشف و Cham", "ESP & Cham" },
 	{ "Hitbox", "الهيت بوكس", "Hitbox" },
 	{ "Trigger", "التريقر بوت", "TriggerBot" },
@@ -596,8 +716,8 @@ local tabList = {
 
 for i, info in ipairs(tabList) do
 	local btn = Instance.new("TextButton")
-	btn.Size = UDim2.new(1, -10, 0, 34)
-	btn.Position = UDim2.fromOffset(5, 6 + (i - 1) * 40)
+	btn.Size = UDim2.new(1, -10, 0, 32)
+	btn.Position = UDim2.fromOffset(5, 5 + (i - 1) * 37)
 	btn.BackgroundColor3 = C.surface
 	btn.Font = Enum.Font.GothamBold
 	btn.Text = T(info[2], info[3])
@@ -757,20 +877,85 @@ addToggleRow(homeP, 10, "تفعيل / إلغاء الأيم بوت", "Toggle Aim
 addToggleRow(homeP, 47, "تفعيل / إلغاء الكشف + Cham", "Toggle ESP & Cham", function() return S.espEnabled or S.espCham end, function(v) S.espEnabled = v; S.espCham = v end, function() updateVisuals(); syncAllToggles() end)
 addToggleRow(homeP, 84, "تفعيل / إلغاء الهيت بوكس", "Toggle Hitbox", function() return S.hitboxEnabled end, function(v) S.hitboxEnabled = v end, function() applyHitbox(); syncAllToggles() end)
 addToggleRow(homeP, 121, "تفعيل / إلغاء التريقر بوت", "Toggle TriggerBot", function() return S.triggerEnabled end, function(v) S.triggerEnabled = v end, syncAllToggles)
-homeP.CanvasSize = UDim2.fromOffset(0, 175)
+addToggleRow(homeP, 158, "تفعيل / إلغاء السرعة والقفز", "Toggle Speed & Jump", function() return S.moveEnabled end, function(v) S.moveEnabled = v end, function() applyMovement(); syncAllToggles() end)
+homeP.CanvasSize = UDim2.fromOffset(0, 210)
 
--- 2) قائمة الأيم بوت
+-- 2) قائمة الأيم بوت + No Recoil
 local aimP = makePage("Aim")
-addToggleRow(aimP, 10, "تشغيل الأيم بوت", "Enable Aim Assist", function() return S.aimEnabled end, function(v) S.aimEnabled = v end, syncAllToggles)
-addToggleRow(aimP, 47, "التصويب عند كليك يمين فقط", "Hold RMB Only", function() return S.aimHoldRmb end, function(v) S.aimHoldRmb = v end)
-addStepperRow(aimP, 84, "نطاق دائرة FOV", "FOV Radius", function() return S.aimFov end, function(v) S.aimFov = v end, 10, 30, 500, function(v) return tostring(v) .. "px" end, function(v)
+addToggleRow(aimP, 10, "تشغيل الأيم بوت", "Enable Aim Assist", function() return S.aimEnabled end, function(v)
+	S.aimEnabled = v
+	if not v then aimToggledState = false end
+end, syncAllToggles)
+
+local modeBtn = Instance.new("TextButton")
+modeBtn.Size = UDim2.new(1, -20, 0, 28)
+modeBtn.Position = UDim2.fromOffset(10, 46)
+modeBtn.BackgroundColor3 = C.panel
+modeBtn.Font = Enum.Font.GothamBold
+modeBtn.TextColor3 = C.neonGold
+modeBtn.TextSize = 11
+modeBtn.Parent = aimP
+corner(modeBtn, 6)
+stroke(modeBtn, C.neonGold, 1, 0.4)
+
+local function syncModeBtn()
+	if S.aimBehavior == "HOLD" then
+		modeBtn.Text = T("وضع التفعيل: ضغط مستمر (Hold)", "Mode: Hold Key / Mouse")
+	else
+		local stateTxt = aimToggledState and T("مثبّت", "LOCKED") or T("غير مثبّت", "UNLOCKED")
+		modeBtn.Text = T("وضع التفعيل: تثبيت بضغطة (Toggle) [" .. stateTxt .. "]", "Mode: Press Toggle [" .. stateTxt .. "]")
+	end
+end
+registerText(syncModeBtn)
+syncModeBtn()
+hook(modeBtn.MouseButton1Click:Connect(function()
+	S.aimBehavior = (S.aimBehavior == "HOLD") and "TOGGLE" or "HOLD"
+	if S.aimBehavior == "HOLD" then
+		aimToggledState = false
+	end
+	syncModeBtn()
+end))
+
+local keyBtn = Instance.new("TextButton")
+keyBtn.Size = UDim2.new(1, -20, 0, 28)
+keyBtn.Position = UDim2.fromOffset(10, 79)
+keyBtn.BackgroundColor3 = C.panel
+keyBtn.Font = Enum.Font.GothamBold
+keyBtn.TextColor3 = C.neonCyan
+keyBtn.TextSize = 11
+keyBtn.Parent = aimP
+corner(keyBtn, 6)
+stroke(keyBtn, C.neonCyan, 1, 0.4)
+
+local function syncKeyBtn()
+	local info = getAimKeyInfo()
+	local kName = T(info.label, info.en)
+	keyBtn.Text = T("زر الأيم بوت (ماوس/كيبورد): ", "Aim Key (Mouse/Key): ") .. kName
+end
+registerText(syncKeyBtn)
+syncKeyBtn()
+hook(keyBtn.MouseButton1Click:Connect(function()
+	local currentIdx = 1
+	for i, item in ipairs(AIM_KEYS) do
+		if item.id == S.aimKeyId then
+			currentIdx = i
+			break
+		end
+	end
+	S.aimKeyId = AIM_KEYS[(currentIdx % #AIM_KEYS) + 1].id
+	aimToggledState = false
+	syncKeyBtn()
+	syncModeBtn()
+end))
+
+addStepperRow(aimP, 112, "نطاق دائرة FOV", "FOV Radius", function() return S.aimFov end, function(v) S.aimFov = v end, 10, 30, 500, function(v) return tostring(v) .. "px" end, function(v)
 	fovCircle.Size = UDim2.fromOffset(v * 2, v * 2)
 end)
-addStepperRow(aimP, 121, "نعومة التصويب", "Smoothness", function() return S.aimSmooth end, function(v) S.aimSmooth = v end, 0.03, 0.03, 1, function(v) return string.format("%.2f", v) end)
+addStepperRow(aimP, 148, "نعومة التصويب", "Smoothness", function() return S.aimSmooth end, function(v) S.aimSmooth = v end, 0.03, 0.03, 1, function(v) return string.format("%.2f", v) end)
 
 local boneBtn = Instance.new("TextButton")
-boneBtn.Size = UDim2.new(1, -20, 0, 29)
-boneBtn.Position = UDim2.fromOffset(10, 158)
+boneBtn.Size = UDim2.new(1, -20, 0, 28)
+boneBtn.Position = UDim2.fromOffset(10, 184)
 boneBtn.BackgroundColor3 = C.panel
 boneBtn.Font = Enum.Font.GothamBold
 boneBtn.TextColor3 = C.neonCyan
@@ -789,9 +974,19 @@ hook(boneBtn.MouseButton1Click:Connect(function()
 	S.aimPart = bones[(idx % #bones) + 1]
 	syncBoneBtn()
 end))
-aimP.CanvasSize = UDim2.fromOffset(0, 210)
 
--- 3) قائمة الكشف و Cham
+addToggleRow(aimP, 217, "منع اهتزاز السلاح (No Recoil)", "No Recoil (Anti-Shake)", function() return S.noRecoilEnabled end, function(v) S.noRecoilEnabled = v end, syncAllToggles)
+addStepperRow(aimP, 253, "قوة تثبيت الارتداد", "Recoil Damp Strength", function() return S.noRecoilStrength end, function(v) S.noRecoilStrength = v end, 0.05, 0.1, 1.0, function(v) return string.format("%.2f", v) end)
+aimP.CanvasSize = UDim2.fromOffset(0, 300)
+
+-- 3) قائمة السرعة ومسافة القفز
+local moveP = makePage("Move")
+addToggleRow(moveP, 10, "تشغيل السرعة والقفز", "Enable Speed & Jump", function() return S.moveEnabled end, function(v) S.moveEnabled = v end, function() applyMovement(); syncAllToggles() end)
+addStepperRow(moveP, 47, "السرعة (WalkSpeed)", "WalkSpeed", function() return S.walkSpeed end, function(v) S.walkSpeed = v end, 2, 16, 150, function(v) return tostring(v) end, function() applyMovement() end)
+addStepperRow(moveP, 84, "مسافة / قوة القفز", "Jump Power", function() return S.jumpPower end, function(v) S.jumpPower = v end, 5, 50, 250, function(v) return tostring(v) end, function() applyMovement() end)
+moveP.CanvasSize = UDim2.fromOffset(0, 140)
+
+-- 4) قائمة الكشف و Cham
 local espP = makePage("ESP")
 addToggleRow(espP, 10, "إظهار الأسماء والمسافة", "Show Name & Distance", function() return S.espEnabled end, function(v) S.espEnabled = v end, function() updateVisuals(); syncAllToggles() end)
 addToggleRow(espP, 47, "Player Cham (من وراء الجدار)", "Player Cham (Wall)", function() return S.espCham end, function(v) S.espCham = v end, function() updateVisuals(); syncAllToggles() end)
@@ -799,20 +994,20 @@ addToggleRow(espP, 84, "شريط الصحة الطولي بجانب اللاعب
 addToggleRow(espP, 121, "إظهار دائرة FOV", "Show FOV Circle", function() return S.espCircle end, function(v) S.espCircle = v; fovCircle.Visible = v end, syncAllToggles)
 espP.CanvasSize = UDim2.fromOffset(0, 180)
 
--- 4) قائمة الهيت بوكس
+-- 5) قائمة الهيت بوكس
 local hitP = makePage("Hitbox")
 addToggleRow(hitP, 10, "تشغيل الهيت بوكس", "Enable Hitbox", function() return S.hitboxEnabled end, function(v) S.hitboxEnabled = v end, function() applyHitbox(); syncAllToggles() end)
 addStepperRow(hitP, 47, "حجم الهيت بوكس", "Hitbox Size", function() return S.hitboxSize end, function(v) S.hitboxSize = v end, 1, 2, 20, function(v) return tostring(v) end, function() applyHitbox() end)
 addStepperRow(hitP, 84, "شفافية الهيت بوكس", "Hitbox Transparency", function() return S.hitboxTrans end, function(v) S.hitboxTrans = v end, 0.05, 0.2, 0.98, function(v) return string.format("%.2f", v) end, function() applyHitbox() end)
 hitP.CanvasSize = UDim2.fromOffset(0, 150)
 
--- 5) قائمة التريقر بوت
+-- 6) قائمة التريقر بوت
 local trigP = makePage("Trigger")
 addToggleRow(trigP, 10, "تشغيل التريقر بوت", "Enable TriggerBot", function() return S.triggerEnabled end, function(v) S.triggerEnabled = v end, syncAllToggles)
 addStepperRow(trigP, 47, "تأخير الإطلاق", "Trigger Delay", function() return S.triggerDelay end, function(v) S.triggerDelay = v end, 0.01, 0, 0.3, function(v) return string.format("%.2fs", v) end)
 trigP.CanvasSize = UDim2.fromOffset(0, 115)
 
--- 6) قائمة الإعدادات
+-- 7) قائمة الإعدادات
 local setP = makePage("Settings")
 addToggleRow(setP, 10, "فحص الفريق (Team Check)", "Team Check", function() return S.teamCheck end, function(v) S.teamCheck = v end, function() updateVisuals(); syncAllToggles() end)
 addStepperRow(setP, 47, "أقصى مسافة", "Max Distance", function() return S.maxRange end, function(v) S.maxRange = v end, 50, 100, 2500, function(v) return tostring(v) .. " studs" end, function() updateVisuals() end)
@@ -840,6 +1035,7 @@ local function unloadAll()
 		pcall(function() c:Disconnect() end)
 	end
 	table.clear(connections)
+	restoreMovement()
 	restoreAllHitboxes()
 	clearAllVisuals()
 	if screenGui and screenGui.Parent then
@@ -854,9 +1050,23 @@ hook(screenGui.Destroying:Connect(unloadAll))
 
 local menuVisible = true
 hook(UserInputService.InputBegan:Connect(function(input, processed)
+	if not isRunning then return end
 	if not processed and input.KeyCode == Enum.KeyCode.F1 then
 		menuVisible = not menuVisible
 		main.Visible = menuVisible
+		return
+	end
+	if not processed and S.aimEnabled and S.aimBehavior == "TOGGLE" and matchesAimInput(input) then
+		aimToggledState = not aimToggledState
+		syncModeBtn()
+	end
+end))
+
+hook(LocalPlayer.CharacterAdded:Connect(function()
+	savedMove.hum = nil
+	task.wait(0.1)
+	if S.moveEnabled then
+		applyMovement()
 	end
 end))
 
@@ -894,12 +1104,17 @@ hook(RunService.RenderStepped:Connect(function()
 	fovCircle.Visible = S.espCircle
 	fovCircle.Size = UDim2.fromOffset(S.aimFov * 2, S.aimFov * 2)
 
+	if S.moveEnabled then
+		applyMovement()
+	end
+
 	if S.hitboxEnabled then
 		applyHitbox()
 	end
 
+	Camera = Workspace.CurrentCamera
 	if S.aimEnabled and Camera then
-		local allowAim = (not S.aimHoldRmb) or UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
+		local allowAim = (S.aimBehavior == "HOLD" and isAimKeyDown()) or (S.aimBehavior == "TOGGLE" and aimToggledState)
 		if allowAim then
 			local targetPart = getBestAimTarget()
 			if targetPart then
@@ -909,6 +1124,7 @@ hook(RunService.RenderStepped:Connect(function()
 		end
 	end
 
+	applyNoRecoil(Camera)
 	checkTriggerBot()
 end))
 
