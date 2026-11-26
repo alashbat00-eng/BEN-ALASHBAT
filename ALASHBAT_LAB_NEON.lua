@@ -1,10 +1,11 @@
--- ALASHBAT LAB — BATMAN CLIENT EDITION
+-- ALASHBAT LAB — GOTHAM EDITION
 -- Complete self-contained script for Roblox Executor
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
+local HttpService = game:GetService("HttpService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 
 local LocalPlayer = Players.LocalPlayer
@@ -14,8 +15,8 @@ local Mouse = LocalPlayer:GetMouse()
 local Camera = Workspace.CurrentCamera
 
 local env = (getgenv and getgenv()) or _G
-if env.ALASHBAT_BAT_UNLOAD then
-	pcall(env.ALASHBAT_BAT_UNLOAD)
+if env.ALASHBAT_GOTHAM_UNLOAD then
+	pcall(env.ALASHBAT_GOTHAM_UNLOAD)
 end
 
 local isRunning = true
@@ -29,21 +30,22 @@ local function hook(conn)
 	return conn
 end
 
-local function randTag(prefix)
-	local chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-	local out = { prefix or "U" }
-	for i = 1, 8 do
-		local idx = math.random(1, #chars)
-		table.insert(out, string.sub(chars, idx, idx))
+local function randId(prefix)
+	local pool = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	local t = { prefix or "G" }
+	for _ = 1, 8 do
+		local idx = math.random(1, #pool)
+		table.insert(t, string.sub(pool, idx, idx))
 	end
-	return table.concat(out)
+	return table.concat(t)
 end
 
-local GUI_NAME = randTag("BAT_")
-local TAG_NAME = randTag("T_")
-local CHAM_NAME = randTag("C_")
+local GUI_NAME = randId("G_")
+local TAG_NAME = randId("T_")
+local CHAM_NAME = randId("C_")
+local CONFIG_FOLDER = "AlashbatGothamCfg"
+local CONFIG_FILE = "settings.json"
 
--- الإعدادات الموحدة
 local S = {
 	lang = "AR", -- "AR" | "EN"
 	menuOpen = true,
@@ -53,14 +55,14 @@ local S = {
 	rotateCharacter = true,
 	aimPart = "Head",
 	aimFov = 145,
-	aimSmooth = 0.28,
+	aimSmooth = 0.45,
 	aimBehavior = "HOLD", -- "HOLD" | "TOGGLE"
 	aimBindType = "MouseButton", -- "MouseButton" | "KeyCode"
 	aimKeyName = "MouseButton2",
 	noRecoilEnabled = true,
 	noRecoilStrength = 0.8,
 
-	-- Visuals (Eye-friendly)
+	-- Visuals
 	espEnabled = true,
 	espNames = true,
 	espDistance = true,
@@ -73,19 +75,17 @@ local S = {
 	walkSpeed = 28,
 	jumpPower = 75,
 
-	-- Hitbox
+	-- Hitbox & Trigger
 	hitboxEnabled = false,
-	hitboxSize = 5,
+	hitboxSize = 6,
 	hitboxTrans = 0.9,
-
-	-- TriggerBot
 	triggerEnabled = false,
-	triggerDelay = 0.04,
+	triggerDelay = 0.03,
 
-	-- Protection & Filters
+	-- Filters
 	teamCheck = true,
 	maxRange = 800,
-	safeMode = true
+	eyeComfort = true
 }
 
 local aimToggled = false
@@ -93,6 +93,38 @@ local aimToggled = false
 local function T(ar, en)
 	return S.lang == "AR" and ar or en
 end
+
+local function saveConfig()
+	local ok = false
+	pcall(function()
+		if makefolder and isfolder and not isfolder(CONFIG_FOLDER) then
+			makefolder(CONFIG_FOLDER)
+		end
+		if writefile then
+			writefile(CONFIG_FOLDER .. "/" .. CONFIG_FILE, HttpService:JSONEncode(S))
+			ok = true
+		end
+	end)
+	return ok
+end
+
+local function loadConfig()
+	pcall(function()
+		if not readfile then return end
+		local path = CONFIG_FOLDER .. "/" .. CONFIG_FILE
+		if isfile and not isfile(path) then return end
+		local decoded = HttpService:JSONDecode(readfile(path))
+		if typeof(decoded) == "table" then
+			for k, v in pairs(decoded) do
+				if S[k] ~= nil and typeof(v) == typeof(S[k]) then
+					S[k] = v
+				end
+			end
+		end
+	end)
+end
+
+loadConfig()
 
 local function getAimBindDisplay()
 	if S.aimKeyName == "MouseButton2" then
@@ -131,7 +163,7 @@ local function resolveUiParent()
 	end
 	local okCore, core = pcall(function()
 		local probe = Instance.new("Folder")
-		probe.Name = randTag("P_")
+		probe.Name = randId("P_")
 		probe.Parent = game:GetService("CoreGui")
 		probe:Destroy()
 		return game:GetService("CoreGui")
@@ -143,20 +175,21 @@ end
 local uiParent = resolveUiParent()
 if not uiParent then return end
 
--- ثيم باتمان داكن ومريح للعين
-local P = {
-	bg = Color3.fromRGB(10, 11, 14),
-	side = Color3.fromRGB(14, 15, 19),
-	card = Color3.fromRGB(19, 21, 27),
-	cardHover = Color3.fromRGB(25, 28, 36),
-	trackOff = Color3.fromRGB(48, 52, 64),
-	batGold = Color3.fromRGB(242, 196, 42),
-	batGoldSoft = Color3.fromRGB(175, 138, 26),
-	text = Color3.fromRGB(232, 234, 240),
-	sub = Color3.fromRGB(140, 146, 160),
-	border = Color3.fromRGB(36, 39, 48),
-	ok = Color3.fromRGB(72, 205, 132),
-	danger = Color3.fromRGB(235, 92, 102)
+-- لوحة ألوان هادئة ومريحة للعين مستوحاة من الصورة + لمسة باتمان الذهبية
+local C = {
+	outerBg = Color3.fromRGB(16, 17, 20),
+	sideBg = Color3.fromRGB(20, 21, 25),
+	cardBg = Color3.fromRGB(26, 28, 33),
+	rowBg = Color3.fromRGB(32, 34, 40),
+	trackOff = Color3.fromRGB(62, 66, 76),
+	sliderBg = Color3.fromRGB(46, 49, 58),
+	accent = Color3.fromRGB(218, 176, 56),
+	accentSoft = Color3.fromRGB(145, 118, 42),
+	text = Color3.fromRGB(228, 230, 236),
+	muted = Color3.fromRGB(138, 143, 156),
+	line = Color3.fromRGB(46, 49, 58),
+	ok = Color3.fromRGB(84, 198, 132),
+	danger = Color3.fromRGB(224, 96, 106)
 }
 
 local function round(inst, r)
@@ -168,9 +201,9 @@ end
 
 local function stroke(inst, col, thick, trans)
 	local s = Instance.new("UIStroke")
-	s.Color = col or P.border
+	s.Color = col or C.line
 	s.Thickness = thick or 1
-	s.Transparency = trans or 0.25
+	s.Transparency = trans or 0.35
 	s.Parent = inst
 	return s
 end
@@ -200,11 +233,11 @@ local function isEnemy(player)
 	return true
 end
 
-local function getEyeFriendlyColor(player)
-	if player.Team and player.TeamColor and not S.safeMode then
+local function getEspColor(player)
+	if player.Team and player.TeamColor and not S.eyeComfort then
 		return player.TeamColor.Color
 	end
-	return Color3.fromRGB(245, 204, 72)
+	return Color3.fromRGB(226, 192, 88)
 end
 
 local function getTargets()
@@ -223,7 +256,7 @@ end
 
 -- دائرة FOV مريحة للعين
 local fovCircle = Instance.new("Frame")
-fovCircle.Name = randTag("F_")
+fovCircle.Name = randId("F_")
 fovCircle.AnchorPoint = Vector2.new(0.5, 0.5)
 fovCircle.Position = UDim2.fromScale(0.5, 0.5)
 fovCircle.Size = UDim2.fromOffset(S.aimFov * 2, S.aimFov * 2)
@@ -231,9 +264,9 @@ fovCircle.BackgroundTransparency = 1
 fovCircle.Visible = S.espCircle
 fovCircle.Parent = screenGui
 round(fovCircle, 999)
-stroke(fovCircle, P.batGold, 1.3, 0.35)
+stroke(fovCircle, C.accent, 1.2, 0.4)
 
--- نظام الكشف المريح للعين + شريط صحة عمودي بجانب اللاعب + Cham
+-- نظام ESP + شريط صحة عمودي بجانب اللاعب + Cham
 local espMap = {}
 
 local function clearPlayerEsp(p)
@@ -260,7 +293,7 @@ local function refreshSideHealth(pack, hum)
 		local ratio = math.clamp(hum.Health / math.max(hum.MaxHealth, 1), 0, 1)
 		pack.hpFill.Size = UDim2.new(1, 0, ratio, 0)
 		pack.hpFill.Position = UDim2.new(0, 0, 1 - ratio, 0)
-		pack.hpFill.BackgroundColor3 = ratio > 0.5 and Color3.fromRGB(95, 214, 146) or (ratio > 0.25 and P.batGold or Color3.fromRGB(232, 108, 114))
+		pack.hpFill.BackgroundColor3 = ratio > 0.5 and Color3.fromRGB(92, 198, 138) or (ratio > 0.25 and C.accent or Color3.fromRGB(220, 104, 112))
 	end
 end
 
@@ -280,7 +313,7 @@ local function updateEsp()
 		local dist = myRoot and (myRoot.Position - hrp.Position).Magnitude or 0
 		if dist <= S.maxRange then
 			active[p] = true
-			local col = getEyeFriendlyColor(p)
+			local col = getEspColor(p)
 
 			local pack = espMap[p]
 			if not pack or pack.char ~= char then
@@ -295,9 +328,9 @@ local function updateEsp()
 					hl.Name = CHAM_NAME
 					hl.Adornee = char
 					hl.FillColor = col
-					hl.OutlineColor = P.batGold
-					hl.FillTransparency = 0.72
-					hl.OutlineTransparency = 0.15
+					hl.OutlineColor = C.accent
+					hl.FillTransparency = 0.76
+					hl.OutlineTransparency = 0.2
 					hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
 					hl.Parent = char
 					pack.highlight = hl
@@ -329,14 +362,14 @@ local function updateEsp()
 					lbl.Font = Enum.Font.GothamMedium
 					lbl.TextSize = 12
 					lbl.TextColor3 = col
-					lbl.TextStrokeTransparency = 0.45
+					lbl.TextStrokeTransparency = 0.5
 					lbl.Parent = bb
 
 					local hpBg = Instance.new("Frame")
 					hpBg.Name = "SideHPBg"
 					hpBg.Position = UDim2.fromOffset(20, 20)
 					hpBg.Size = UDim2.fromOffset(5, 44)
-					hpBg.BackgroundColor3 = Color3.fromRGB(22, 24, 30)
+					hpBg.BackgroundColor3 = Color3.fromRGB(24, 26, 32)
 					hpBg.BorderSizePixel = 0
 					hpBg.Parent = bb
 					round(hpBg, 2)
@@ -344,7 +377,7 @@ local function updateEsp()
 					local hpFill = Instance.new("Frame")
 					hpFill.Name = "SideHPFill"
 					hpFill.Size = UDim2.fromScale(1, 1)
-					hpFill.BackgroundColor3 = Color3.fromRGB(95, 214, 146)
+					hpFill.BackgroundColor3 = Color3.fromRGB(92, 198, 138)
 					hpFill.BorderSizePixel = 0
 					hpFill.Parent = hpBg
 					round(hpFill, 2)
@@ -465,7 +498,7 @@ local function applyHb()
 	end
 end
 
--- نظام Aimbot الفعلي (توجيه الكاميرا + لف الشخصية نحو الهدف) + No Recoil
+-- نظام Aimbot حقيقي (توجيه الكاميرا + لف الشخصية + مواءمة موضع الماوس) + No Recoil
 local function getBestTargetPart()
 	Camera = Workspace.CurrentCamera
 	if not Camera then return nil, nil end
@@ -507,7 +540,7 @@ local function applyNoRecoil(cam)
 		local pos = cam.CFrame.Position
 		local prevLook = lastCamCFrame.LookVector
 		local curLook = cam.CFrame.LookVector
-		local dampedLook = curLook:Lerp(prevLook, math.clamp(S.noRecoilStrength * 0.5, 0, 0.88)).Unit
+		local dampedLook = curLook:Lerp(prevLook, math.clamp(S.noRecoilStrength * 0.45, 0, 0.85)).Unit
 		cam.CFrame = CFrame.lookAt(pos, pos + dampedLook)
 	end
 	lastCamCFrame = cam.CFrame
@@ -520,21 +553,30 @@ local function applyAimbot(cam)
 	local targetPart, targetRoot = getBestTargetPart()
 	if not targetPart then return end
 
-	local alpha = math.clamp(S.aimSmooth, 0.02, 1)
+	local alpha = math.clamp(S.aimSmooth, 0.05, 1)
 	local camGoal = CFrame.lookAt(cam.CFrame.Position, targetPart.Position)
 	cam.CFrame = cam.CFrame:Lerp(camGoal, alpha)
 
 	-- لف شخصية اللاعب فعلياً نحو الهدف حتى يتطابق اتجاه الضرب مع الكاميرا
-	if S.rotateCharacter then
-		local myChar = LocalPlayer.Character
-		local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
-		local focusPos = targetRoot and targetRoot.Position or targetPart.Position
-		if myRoot then
-			local flatTarget = Vector3.new(focusPos.X, myRoot.Position.Y, focusPos.Z)
-			if (flatTarget - myRoot.Position).Magnitude > 0.05 then
-				local charGoal = CFrame.lookAt(myRoot.Position, flatTarget)
-				myRoot.CFrame = myRoot.CFrame:Lerp(charGoal, math.clamp(alpha * 1.25, 0.04, 1))
-			end
+	local myChar = LocalPlayer.Character
+	local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+	local focusPos = targetRoot and targetRoot.Position or targetPart.Position
+	if S.rotateCharacter and myRoot then
+		local flatTarget = Vector3.new(focusPos.X, myRoot.Position.Y, focusPos.Z)
+		if (flatTarget - myRoot.Position).Magnitude > 0.05 then
+			local charGoal = CFrame.lookAt(myRoot.Position, flatTarget)
+			myRoot.CFrame = myRoot.CFrame:Lerp(charGoal, math.clamp(alpha * 1.35, 0.08, 1))
+		end
+	end
+
+	-- تحريك مؤشر الماوس نحو إحداثي الهدف على الشاشة عندما يعتمد السلاح على موضع الماوس
+	local proj, onScreen = cam:WorldToViewportPoint(targetPart.Position)
+	if onScreen and proj.Z > 0 and typeof(mousemoverel) == "function" then
+		local curMouse = UserInputService:GetMouseLocation()
+		local dx = (proj.X - curMouse.X) * math.clamp(alpha * 0.65, 0.05, 0.75)
+		local dy = (proj.Y - curMouse.Y) * math.clamp(alpha * 0.65, 0.05, 0.75)
+		if math.abs(dx) > 0.5 or math.abs(dy) > 0.5 then
+			pcall(mousemoverel, dx, dy)
 		end
 	end
 end
@@ -574,17 +616,17 @@ local function updateTrigger()
 	end
 end
 
--- الواجهة الحديثة على طراز البطاقات المقسّمة مع ثيم باتمان
+-- الواجهة الهادئة المطابقة لترتيب الصورة مع ثيم باتمان الذهبي الخفيف
 local win = Instance.new("Frame")
-win.Name = randTag("W_")
+win.Name = randId("W_")
 win.Active = true
-win.BackgroundColor3 = P.bg
-win.Position = UDim2.new(0.5, -390, 0.5, -230)
-win.Size = UDim2.fromOffset(780, 460)
+win.BackgroundColor3 = C.outerBg
+win.Position = UDim2.new(0.5, -400, 0.5, -235)
+win.Size = UDim2.fromOffset(800, 470)
 win.ClipsDescendants = true
 win.Parent = screenGui
-round(win, 16)
-stroke(win, P.batGold, 1.4, 0.25)
+round(win, 18)
+stroke(win, C.line, 1.2, 0.25)
 
 do
 	local dragging, dragStart, startPos = false, nil, nil
@@ -608,146 +650,156 @@ do
 	end))
 end
 
--- الشريط الجانبي الأيسر (ثيم باتمان)
+-- الشريط الجانبي الأيسر
 local sidebar = Instance.new("Frame")
-sidebar.BackgroundColor3 = P.side
+sidebar.BackgroundColor3 = C.sideBg
 sidebar.Position = UDim2.fromOffset(12, 12)
-sidebar.Size = UDim2.fromOffset(186, 436)
+sidebar.Size = UDim2.fromOffset(192, 446)
 sidebar.BorderSizePixel = 0
 sidebar.Parent = win
-round(sidebar, 12)
-stroke(sidebar, P.border, 1, 0.2)
+round(sidebar, 14)
+stroke(sidebar, C.line, 1, 0.35)
 
--- شارة باتمان الصغيرة في أعلى القائمة الجانبية
-local batBadge = Instance.new("Frame")
-batBadge.BackgroundColor3 = P.card
-batBadge.Position = UDim2.fromOffset(12, 12)
-batBadge.Size = UDim2.new(1, -24, 0, 54)
-batBadge.BorderSizePixel = 0
-batBadge.Parent = sidebar
-round(batBadge, 10)
-stroke(batBadge, P.batGold, 1, 0.45)
+local headerCard = Instance.new("Frame")
+headerCard.BackgroundColor3 = C.cardBg
+headerCard.Position = UDim2.fromOffset(12, 12)
+headerCard.Size = UDim2.new(1, -24, 0, 56)
+headerCard.BorderSizePixel = 0
+headerCard.Parent = sidebar
+round(headerCard, 10)
+stroke(headerCard, C.line, 1, 0.4)
 
-local emblem = Instance.new("Frame")
-emblem.AnchorPoint = Vector2.new(0, 0.5)
-emblem.Position = UDim2.new(0, 10, 0.5, 0)
-emblem.Size = UDim2.fromOffset(52, 28)
-emblem.BackgroundColor3 = P.batGold
-emblem.BorderSizePixel = 0
-emblem.Parent = batBadge
-round(emblem, 14)
+local batOval = Instance.new("Frame")
+batOval.AnchorPoint = Vector2.new(0, 0.5)
+batOval.Position = UDim2.new(0, 10, 0.5, 0)
+batOval.Size = UDim2.fromOffset(48, 28)
+batOval.BackgroundColor3 = C.accent
+batOval.BorderSizePixel = 0
+batOval.Parent = headerCard
+round(batOval, 14)
 
-local emblemInner = Instance.new("Frame")
-emblemInner.AnchorPoint = Vector2.new(0.5, 0.5)
-emblemInner.Position = UDim2.fromScale(0.5, 0.5)
-emblemInner.Size = UDim2.new(1, -4, 1, -4)
-emblemInner.BackgroundColor3 = Color3.fromRGB(9, 10, 13)
-emblemInner.BorderSizePixel = 0
-emblemInner.Parent = emblem
-round(emblemInner, 12)
+local batCore = Instance.new("Frame")
+batCore.AnchorPoint = Vector2.new(0.5, 0.5)
+batCore.Position = UDim2.fromScale(0.5, 0.5)
+batCore.Size = UDim2.new(1, -4, 1, -4)
+batCore.BackgroundColor3 = C.outerBg
+batCore.BorderSizePixel = 0
+batCore.Parent = batOval
+round(batCore, 12)
 
-local emblemTag = Instance.new("TextLabel")
-emblemTag.Size = UDim2.fromScale(1, 1)
-emblemTag.BackgroundTransparency = 1
-emblemTag.Font = Enum.Font.GothamBlack
-emblemTag.Text = "BAT"
-emblemTag.TextColor3 = P.batGold
-emblemTag.TextSize = 9
-emblemTag.Parent = emblemInner
+local batTag = Instance.new("TextLabel")
+batTag.Size = UDim2.fromScale(1, 1)
+batTag.BackgroundTransparency = 1
+batTag.Font = Enum.Font.GothamBlack
+batTag.Text = "BAT"
+batTag.TextColor3 = C.accent
+batTag.TextSize = 9
+batTag.Parent = batCore
 
 local brandTitle = Instance.new("TextLabel")
 brandTitle.BackgroundTransparency = 1
-brandTitle.Position = UDim2.fromOffset(70, 9)
-brandTitle.Size = UDim2.new(1, -78, 0, 18)
+brandTitle.Position = UDim2.fromOffset(66, 9)
+brandTitle.Size = UDim2.new(1, -74, 0, 18)
 brandTitle.Font = Enum.Font.GothamBold
 brandTitle.Text = "ALASHBAT"
-brandTitle.TextColor3 = P.batGold
+brandTitle.TextColor3 = C.text
 brandTitle.TextSize = 13
 brandTitle.TextXAlignment = Enum.TextXAlignment.Left
-brandTitle.Parent = batBadge
+brandTitle.Parent = headerCard
 
 local brandSub = Instance.new("TextLabel")
 brandSub.BackgroundTransparency = 1
-brandSub.Position = UDim2.fromOffset(70, 27)
-brandSub.Size = UDim2.new(1, -78, 0, 16)
+brandSub.Position = UDim2.fromOffset(66, 28)
+brandSub.Size = UDim2.new(1, -74, 0, 16)
 brandSub.Font = Enum.Font.Gotham
 brandSub.Text = "Gotham Client"
-brandSub.TextColor3 = P.sub
+brandSub.TextColor3 = C.muted
 brandSub.TextSize = 10
 brandSub.TextXAlignment = Enum.TextXAlignment.Left
-brandSub.Parent = batBadge
+brandSub.Parent = headerCard
 
--- منطقة المحتوى اليمنى
+-- المنطقة اليمنى
 local mainArea = Instance.new("Frame")
 mainArea.BackgroundTransparency = 1
-mainArea.Position = UDim2.fromOffset(208, 12)
-mainArea.Size = UDim2.new(1, -220, 1, -24)
+mainArea.Position = UDim2.fromOffset(214, 12)
+mainArea.Size = UDim2.new(1, -226, 1, -24)
 mainArea.Parent = win
 
 local topStrip = Instance.new("Frame")
-topStrip.BackgroundColor3 = P.side
+topStrip.BackgroundColor3 = C.sideBg
 topStrip.Position = UDim2.fromOffset(0, 0)
-topStrip.Size = UDim2.new(1, 0, 0, 42)
+topStrip.Size = UDim2.new(1, 0, 0, 44)
 topStrip.Parent = mainArea
-round(topStrip, 10)
-stroke(topStrip, P.border, 1, 0.25)
+round(topStrip, 12)
+stroke(topStrip, C.line, 1, 0.35)
 
-local pageHeader = Instance.new("TextLabel")
-pageHeader.BackgroundTransparency = 1
-pageHeader.Position = UDim2.fromOffset(14, 0)
-pageHeader.Size = UDim2.new(1, -150, 1, 0)
-pageHeader.Font = Enum.Font.GothamBold
-pageHeader.TextSize = 14
-pageHeader.TextColor3 = P.text
-pageHeader.TextXAlignment = Enum.TextXAlignment.Left
-pageHeader.Parent = topStrip
+local pageTitle = Instance.new("TextLabel")
+pageTitle.BackgroundTransparency = 1
+pageTitle.Position = UDim2.fromOffset(14, 0)
+pageTitle.Size = UDim2.new(1, -210, 1, 0)
+pageTitle.Font = Enum.Font.GothamBold
+pageTitle.TextSize = 14
+pageTitle.TextColor3 = C.text
+pageTitle.TextXAlignment = Enum.TextXAlignment.Left
+pageTitle.Parent = topStrip
+
+local saveBtn = Instance.new("TextButton")
+saveBtn.Size = UDim2.fromOffset(82, 26)
+saveBtn.Position = UDim2.new(1, -196, 0.5, -13)
+saveBtn.BackgroundColor3 = C.cardBg
+saveBtn.Font = Enum.Font.GothamBold
+saveBtn.TextSize = 11
+saveBtn.TextColor3 = C.ok
+saveBtn.Parent = topStrip
+round(saveBtn, 6)
+stroke(saveBtn, C.line, 1, 0.3)
 
 local langBtn = Instance.new("TextButton")
 langBtn.Size = UDim2.fromOffset(68, 26)
-langBtn.Position = UDim2.new(1, -108, 0.5, -13)
-langBtn.BackgroundColor3 = P.card
+langBtn.Position = UDim2.new(1, -106, 0.5, -13)
+langBtn.BackgroundColor3 = C.cardBg
 langBtn.Font = Enum.Font.GothamBold
 langBtn.Text = "AR / EN"
-langBtn.TextColor3 = P.batGold
+langBtn.TextColor3 = C.accent
 langBtn.TextSize = 11
 langBtn.Parent = topStrip
 round(langBtn, 6)
-stroke(langBtn, P.batGoldSoft, 1, 0.35)
+stroke(langBtn, C.line, 1, 0.3)
 
 local closeBtn = Instance.new("TextButton")
 closeBtn.Size = UDim2.fromOffset(28, 26)
-closeBtn.Position = UDim2.new(1, -34, 0.5, -13)
-closeBtn.BackgroundColor3 = P.card
+closeBtn.Position = UDim2.new(1, -32, 0.5, -13)
+closeBtn.BackgroundColor3 = C.cardBg
 closeBtn.Font = Enum.Font.GothamBold
 closeBtn.Text = "×"
-closeBtn.TextColor3 = P.danger
+closeBtn.TextColor3 = C.danger
 closeBtn.TextSize = 15
 closeBtn.Parent = topStrip
 round(closeBtn, 6)
-stroke(closeBtn, P.border, 1, 0.25)
+stroke(closeBtn, C.line, 1, 0.3)
 
 local bodyArea = Instance.new("Frame")
 bodyArea.BackgroundTransparency = 1
-bodyArea.Position = UDim2.fromOffset(0, 50)
-bodyArea.Size = UDim2.new(1, 0, 1, -50)
+bodyArea.Position = UDim2.fromOffset(0, 52)
+bodyArea.Size = UDim2.new(1, 0, 1, -52)
 bodyArea.Parent = mainArea
 
 local pages, navBtns = {}, {}
-local uiRefreshers = {}
+local refreshers = {}
 local currentTab = "Aimbot"
 
 local function registerRefresh(fn)
-	table.insert(uiRefreshers, fn)
+	table.insert(refreshers, fn)
 end
 
-local function makeSectionCard(parent, pos, size, titleAr, titleEn)
+local function makeCard(parent, pos, size, titleAr, titleEn)
 	local card = Instance.new("Frame")
-	card.BackgroundColor3 = P.card
+	card.BackgroundColor3 = C.cardBg
 	card.Position = pos
 	card.Size = size
 	card.Parent = parent
-	round(card, 12)
-	stroke(card, P.border, 1, 0.25)
+	round(card, 14)
+	stroke(card, C.line, 1, 0.3)
 
 	local h = Instance.new("TextLabel")
 	h.BackgroundTransparency = 1
@@ -755,7 +807,7 @@ local function makeSectionCard(parent, pos, size, titleAr, titleEn)
 	h.Size = UDim2.new(1, -28, 0, 20)
 	h.Font = Enum.Font.GothamBold
 	h.TextSize = 13
-	h.TextColor3 = P.batGold
+	h.TextColor3 = C.text
 	h.TextXAlignment = Enum.TextXAlignment.Left
 	h.Parent = card
 
@@ -765,40 +817,40 @@ local function makeSectionCard(parent, pos, size, titleAr, titleEn)
 
 	local inner = Instance.new("Frame")
 	inner.BackgroundTransparency = 1
-	inner.Position = UDim2.fromOffset(10, 34)
-	inner.Size = UDim2.new(1, -20, 1, -42)
+	inner.Position = UDim2.fromOffset(12, 34)
+	inner.Size = UDim2.new(1, -24, 1, -44)
 	inner.Parent = card
 	return card, inner
 end
 
-local function makeSwitchRow(parent, y, titleAr, titleEn, descAr, descEn, getFn, setFn, onChanged)
+local function makeSwitch(parent, y, titleAr, titleEn, subAr, subEn, getFn, setFn, onChanged)
 	local row = Instance.new("Frame")
-	row.BackgroundColor3 = P.side
+	row.BackgroundColor3 = C.rowBg
 	row.Position = UDim2.new(0, 0, 0, y)
 	row.Size = UDim2.new(1, 0, 0, 44)
 	row.Parent = parent
-	round(row, 8)
-	stroke(row, P.border, 1, 0.45)
+	round(row, 10)
+	stroke(row, C.line, 1, 0.5)
 
 	local tLbl = Instance.new("TextLabel")
 	tLbl.BackgroundTransparency = 1
 	tLbl.Position = UDim2.fromOffset(12, 5)
-	tLbl.Size = UDim2.new(1, -74, 0, 18)
+	tLbl.Size = UDim2.new(1, -72, 0, 17)
 	tLbl.Font = Enum.Font.GothamBold
 	tLbl.TextSize = 12
-	tLbl.TextColor3 = P.text
+	tLbl.TextColor3 = C.text
 	tLbl.TextXAlignment = Enum.TextXAlignment.Left
 	tLbl.Parent = row
 
-	local dLbl = Instance.new("TextLabel")
-	dLbl.BackgroundTransparency = 1
-	dLbl.Position = UDim2.fromOffset(12, 22)
-	dLbl.Size = UDim2.new(1, -74, 0, 16)
-	dLbl.Font = Enum.Font.Gotham
-	dLbl.TextSize = 10
-	dLbl.TextColor3 = P.sub
-	dLbl.TextXAlignment = Enum.TextXAlignment.Left
-	dLbl.Parent = row
+	local sLbl = Instance.new("TextLabel")
+	sLbl.BackgroundTransparency = 1
+	sLbl.Position = UDim2.fromOffset(12, 22)
+	sLbl.Size = UDim2.new(1, -72, 0, 15)
+	sLbl.Font = Enum.Font.Gotham
+	sLbl.TextSize = 10
+	sLbl.TextColor3 = C.muted
+	sLbl.TextXAlignment = Enum.TextXAlignment.Left
+	sLbl.Parent = row
 
 	local pill = Instance.new("TextButton")
 	pill.AutoButtonColor = false
@@ -812,16 +864,16 @@ local function makeSwitchRow(parent, y, titleAr, titleEn, descAr, descEn, getFn,
 	local knob = Instance.new("Frame")
 	knob.Size = UDim2.fromOffset(16, 16)
 	knob.Position = UDim2.new(0, 3, 0.5, -8)
-	knob.BackgroundColor3 = P.bg
+	knob.BackgroundColor3 = C.text
 	knob.BorderSizePixel = 0
 	knob.Parent = pill
 	round(knob, 8)
 
 	local function sync()
 		tLbl.Text = T(titleAr, titleEn)
-		dLbl.Text = T(descAr, descEn)
+		sLbl.Text = T(subAr, subEn)
 		local active = getFn()
-		pill.BackgroundColor3 = active and P.batGold or P.trackOff
+		pill.BackgroundColor3 = active and C.accent or C.trackOff
 		knob.Position = active and UDim2.new(1, -19, 0.5, -8) or UDim2.new(0, 3, 0.5, -8)
 	end
 
@@ -836,78 +888,95 @@ local function makeSwitchRow(parent, y, titleAr, titleEn, descAr, descEn, getFn,
 	return sync
 end
 
-local function makeStepperRow(parent, y, titleAr, titleEn, getFn, setFn, step, minV, maxV, fmtFn, onChanged)
-	local row = Instance.new("Frame")
-	row.BackgroundColor3 = P.side
-	row.Position = UDim2.new(0, 0, 0, y)
-	row.Size = UDim2.new(1, 0, 0, 38)
-	row.Parent = parent
-	round(row, 8)
-	stroke(row, P.border, 1, 0.45)
+-- شريط سحب حقيقي (Slider) بدلاً من أزرار البلس والماينس
+local function makeSlider(parent, y, titleAr, titleEn, minV, maxV, step, getFn, setFn, fmtFn, onChanged)
+	local wrap = Instance.new("Frame")
+	wrap.BackgroundColor3 = C.rowBg
+	wrap.Position = UDim2.new(0, 0, 0, y)
+	wrap.Size = UDim2.new(1, 0, 0, 44)
+	wrap.Parent = parent
+	round(wrap, 10)
+	stroke(wrap, C.line, 1, 0.5)
 
 	local lbl = Instance.new("TextLabel")
 	lbl.BackgroundTransparency = 1
-	lbl.Position = UDim2.fromOffset(12, 0)
-	lbl.Size = UDim2.new(1, -162, 1, 0)
-	lbl.Font = Enum.Font.GothamMedium
+	lbl.Position = UDim2.fromOffset(12, 5)
+	lbl.Size = UDim2.new(0.7, -12, 0, 16)
+	lbl.Font = Enum.Font.GothamBold
 	lbl.TextSize = 11
-	lbl.TextColor3 = P.text
+	lbl.TextColor3 = C.text
 	lbl.TextXAlignment = Enum.TextXAlignment.Left
-	lbl.Parent = row
+	lbl.Parent = wrap
 
 	local valLbl = Instance.new("TextLabel")
 	valLbl.BackgroundTransparency = 1
-	valLbl.Position = UDim2.new(1, -148, 0, 0)
-	valLbl.Size = UDim2.fromOffset(62, 38)
+	valLbl.Position = UDim2.new(0.7, 0, 0, 5)
+	valLbl.Size = UDim2.new(0.3, -12, 0, 16)
 	valLbl.Font = Enum.Font.GothamBold
 	valLbl.TextSize = 11
-	valLbl.TextColor3 = P.batGold
-	valLbl.Parent = row
+	valLbl.TextColor3 = C.accent
+	valLbl.TextXAlignment = Enum.TextXAlignment.Right
+	valLbl.Parent = wrap
 
-	local minus = Instance.new("TextButton")
-	minus.Size = UDim2.fromOffset(28, 24)
-	minus.Position = UDim2.new(1, -82, 0.5, -12)
-	minus.BackgroundColor3 = P.card
-	minus.Font = Enum.Font.GothamBold
-	minus.Text = "−"
-	minus.TextColor3 = P.text
-	minus.TextSize = 13
-	minus.Parent = row
-	round(minus, 6)
-	stroke(minus, P.border, 1, 0.3)
+	local track = Instance.new("TextButton")
+	track.AutoButtonColor = false
+	track.Position = UDim2.fromOffset(12, 27)
+	track.Size = UDim2.new(1, -24, 0, 8)
+	track.BackgroundColor3 = C.sliderBg
+	track.Text = ""
+	track.Parent = wrap
+	round(track, 4)
 
-	local plus = Instance.new("TextButton")
-	plus.Size = UDim2.fromOffset(28, 24)
-	plus.Position = UDim2.new(1, -50, 0.5, -12)
-	plus.BackgroundColor3 = P.card
-	plus.Font = Enum.Font.GothamBold
-	plus.Text = "+"
-	plus.TextColor3 = P.text
-	plus.TextSize = 13
-	plus.Parent = row
-	round(plus, 6)
-	stroke(plus, P.border, 1, 0.3)
+	local fill = Instance.new("Frame")
+	fill.Size = UDim2.new(0, 0, 1, 0)
+	fill.BackgroundColor3 = C.accent
+	fill.BorderSizePixel = 0
+	fill.Parent = track
+	round(fill, 4)
 
-	local function sync()
+	local function syncVisual()
 		lbl.Text = T(titleAr, titleEn)
-		valLbl.Text = fmtFn(getFn())
+		local v = getFn()
+		valLbl.Text = fmtFn(v)
+		local span = math.max(maxV - minV, 0.0001)
+		local alpha = math.clamp((v - minV) / span, 0, 1)
+		fill.Size = UDim2.new(alpha, 0, 1, 0)
 	end
 
-	registerRefresh(sync)
-	hook(minus.MouseButton1Click:Connect(function()
-		local v = math.clamp(getFn() - step, minV, maxV)
-		setFn(v)
-		sync()
-		if onChanged then onChanged(v) end
+	local function applyFromScreenX(px)
+		local absX = track.AbsolutePosition.X
+		local absW = track.AbsoluteSize.X
+		if absW <= 0 then return end
+		local alpha = math.clamp((px - absX) / absW, 0, 1)
+		local raw = minV + alpha * (maxV - minV)
+		local snapped = math.floor(raw / step + 0.5) * step
+		snapped = math.clamp(snapped, minV, maxV)
+		setFn(snapped)
+		syncVisual()
+		if onChanged then onChanged(snapped) end
+	end
+
+	hook(track.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			applyFromScreenX(input.Position.X)
+			local moveConn, endConn
+			moveConn = UserInputService.InputChanged:Connect(function(mInput)
+				if mInput.UserInputType == Enum.UserInputType.MouseMovement or mInput.UserInputType == Enum.UserInputType.Touch then
+					applyFromScreenX(mInput.Position.X)
+				end
+			end)
+			endConn = input.Changed:Connect(function()
+				if input.UserInputState == Enum.UserInputState.End then
+					if moveConn then moveConn:Disconnect() end
+					if endConn then endConn:Disconnect() end
+				end
+			end)
+		end
 	end))
-	hook(plus.MouseButton1Click:Connect(function()
-		local v = math.clamp(getFn() + step, minV, maxV)
-		setFn(v)
-		sync()
-		if onChanged then onChanged(v) end
-	end))
-	sync()
-	return sync
+
+	registerRefresh(syncVisual)
+	syncVisual()
+	return syncVisual
 end
 
 local navItems = {
@@ -925,13 +994,13 @@ local function setPage(id)
 	end
 	for k, b in pairs(navBtns) do
 		local sel = (k == id)
-		b.BackgroundColor3 = sel and Color3.fromRGB(36, 31, 14) or Color3.fromRGB(0, 0, 0)
-		b.BackgroundTransparency = sel and 0 or 1
-		b.TextColor3 = sel and P.batGold or P.sub
+		b.BackgroundColor3 = C.cardBg
+		b.BackgroundTransparency = sel and 0.15 or 1
+		b.TextColor3 = sel and C.accent or C.muted
 	end
 	for _, item in ipairs(navItems) do
 		if item.id == id then
-			pageHeader.Text = T(item.ar, item.en)
+			pageTitle.Text = T(item.ar, item.en)
 			break
 		end
 	end
@@ -948,7 +1017,7 @@ for i, item in ipairs(navItems) do
 
 	local b = Instance.new("TextButton")
 	b.AutoButtonColor = false
-	b.Position = UDim2.fromOffset(10, 78 + (i - 1) * 40)
+	b.Position = UDim2.fromOffset(10, 80 + (i - 1) * 40)
 	b.Size = UDim2.new(1, -20, 0, 34)
 	b.BackgroundTransparency = 1
 	b.Font = Enum.Font.GothamBold
@@ -961,7 +1030,7 @@ for i, item in ipairs(navItems) do
 	registerRefresh(function()
 		b.Text = "  " .. T(item.ar, item.en)
 		if currentTab == item.id then
-			pageHeader.Text = T(item.ar, item.en)
+			pageTitle.Text = T(item.ar, item.en)
 		end
 	end)
 
@@ -970,37 +1039,36 @@ for i, item in ipairs(navItems) do
 	end))
 end
 
--- 1) صفحة الأيم بوت (توجيه حقيقي + لف اللاعب + تسجيل زر مباشر + هولد/تثبيت + No Recoil)
-local _, aimLeft = makeSectionCard(pages.Aimbot, UDim2.fromOffset(0, 0), UDim2.new(0.56, -6, 1, 0), "توجيه الأيم بوت", "Aimbot Control")
-local _, aimRight = makeSectionCard(pages.Aimbot, UDim2.new(0.56, 6, 0, 0), UDim2.new(0.44, -6, 1, 0), "إعدادات التثبيت والارتداد", "Aim & Recoil Settings")
+-- 1) صفحة الأيم بوت (توجيه حقيقي + لف الشخصية + مواءمة الماوس + تسجيل زر + شرائح سحب)
+local _, aimLeft = makeCard(pages.Aimbot, UDim2.fromOffset(0, 0), UDim2.new(0.54, -6, 1, 0), "الأيم بوت", "Aimbot")
+local _, aimRight = makeCard(pages.Aimbot, UDim2.new(0.54, 6, 0, 0), UDim2.new(0.46, -6, 1, 0), "إعدادات التتبع والارتداد", "Aim & Recoil Settings")
 
-makeSwitchRow(aimLeft, 0, "تفعيل الأيم بوت", "Enable Aimbot", "توجيه الكاميرا واللاعب نحو الهدف", "Smoothly aligns camera & character", function() return S.aimEnabled end, function(v)
+makeSwitch(aimLeft, 0, "تفعيل الأيم بوت", "Enable Aimbot", "توجيه الكاميرا واللاعب والماوس نحو الهدف", "Aligns camera, character & aim direction", function() return S.aimEnabled end, function(v)
 	S.aimEnabled = v
 	if not v then aimToggled = false end
 end)
-makeSwitchRow(aimLeft, 50, "لف شخصية اللاعب فعلياً", "Rotate Character", "تدوير الجسم ليتطابق مع الضرب", "Turns character toward target", function() return S.rotateCharacter end, function(v) S.rotateCharacter = v end)
-makeSwitchRow(aimLeft, 100, "وضع التثبيت (Toggle)", "Toggle Mode", "ضغطة للتثبيت وضغطة للإلغاء (الافتراضي Hold)", "Press to lock/unlock (default Hold)", function() return S.aimBehavior == "TOGGLE" end, function(v)
+makeSwitch(aimLeft, 50, "لف شخصية اللاعب فعلياً", "Rotate Character", "تدوير الجسم ليتطابق مع الضرب", "Turns character toward target", function() return S.rotateCharacter end, function(v) S.rotateCharacter = v end)
+makeSwitch(aimLeft, 100, "تثبيت من ضغطة (Toggle)", "Toggle Mode", "ضغطة للتثبيت أو ضغط مستمر (Hold)", "Toggle lock or hold bind", function() return S.aimBehavior == "TOGGLE" end, function(v)
 	S.aimBehavior = v and "TOGGLE" or "HOLD"
 	if not v then aimToggled = false end
 end)
 
--- زر تسجيل أي زر من الكيبورد أو الماوس
 local bindBtn = Instance.new("TextButton")
 bindBtn.Position = UDim2.new(0, 0, 0, 152)
-bindBtn.Size = UDim2.new(1, 0, 0, 38)
-bindBtn.BackgroundColor3 = P.side
+bindBtn.Size = UDim2.new(1, 0, 0, 36)
+bindBtn.BackgroundColor3 = C.rowBg
 bindBtn.Font = Enum.Font.GothamBold
 bindBtn.TextSize = 11
-bindBtn.TextColor3 = P.batGold
+bindBtn.TextColor3 = C.accent
 bindBtn.Parent = aimLeft
 round(bindBtn, 8)
-stroke(bindBtn, P.batGoldSoft, 1, 0.35)
+stroke(bindBtn, C.line, 1, 0.45)
 
 local function refreshBindText()
 	if listeningForKey then
 		bindBtn.Text = T("اضغط أي زر في الكيبورد أو الماوس...", "Press any key or mouse button...")
 	else
-		bindBtn.Text = T("زر التفعيل الحالي: ", "Current Bind: ") .. getAimBindDisplay() .. T(" (اضغط للتغيير)", " (Click to set)")
+		bindBtn.Text = T("زر التفعيل: ", "Bind: ") .. getAimBindDisplay()
 	end
 end
 registerRefresh(refreshBindText)
@@ -1012,15 +1080,15 @@ hook(bindBtn.MouseButton1Click:Connect(function()
 end))
 
 local boneBtn = Instance.new("TextButton")
-boneBtn.Position = UDim2.new(0, 0, 0, 196)
+boneBtn.Position = UDim2.new(0, 0, 0, 194)
 boneBtn.Size = UDim2.new(1, 0, 0, 36)
-boneBtn.BackgroundColor3 = P.side
+boneBtn.BackgroundColor3 = C.rowBg
 boneBtn.Font = Enum.Font.GothamBold
 boneBtn.TextSize = 11
-boneBtn.TextColor3 = P.text
+boneBtn.TextColor3 = C.text
 boneBtn.Parent = aimLeft
 round(boneBtn, 8)
-stroke(boneBtn, P.border, 1, 0.4)
+stroke(boneBtn, C.line, 1, 0.45)
 
 local bones = { "Head", "HumanoidRootPart", "UpperTorso" }
 local function refreshBoneText()
@@ -1035,63 +1103,74 @@ hook(boneBtn.MouseButton1Click:Connect(function()
 	refreshBoneText()
 end))
 
-makeStepperRow(aimRight, 0, "نطاق الدائرة (FOV)", "FOV Radius", function() return S.aimFov end, function(v) S.aimFov = v end, 10, 40, 450, function(v) return tostring(v) .. "px" end, function(v)
+makeSlider(aimRight, 0, "نطاق الدائرة (FOV)", "FOV Radius", 40, 450, 10, function() return S.aimFov end, function(v) S.aimFov = v end, function(v) return tostring(math.floor(v)) .. "px" end, function(v)
 	fovCircle.Size = UDim2.fromOffset(v * 2, v * 2)
 end)
-makeStepperRow(aimRight, 44, "سرعة التوجيه", "Aim Smooth", function() return S.aimSmooth end, function(v) S.aimSmooth = v end, 0.04, 0.04, 1, function(v) return string.format("%.2f", v) end)
-makeSwitchRow(aimRight, 90, "منع اهتزاز السلاح (No Recoil)", "No Recoil", "تثبيت الكاميرا أثناء الضرب", "Reduces camera kick while firing", function() return S.noRecoilEnabled end, function(v) S.noRecoilEnabled = v end)
-makeStepperRow(aimRight, 140, "قوة منع الارتداد", "Recoil Damp", function() return S.noRecoilStrength end, function(v) S.noRecoilStrength = v end, 0.05, 0.1, 1, function(v) return string.format("%.2f", v) end)
+makeSlider(aimRight, 50, "سرعة التتبع", "Aim Smooth", 0.05, 1, 0.05, function() return S.aimSmooth end, function(v) S.aimSmooth = v end, function(v) return string.format("%.2f", v) end)
+makeSwitch(aimRight, 100, "منع اهتزاز السلاح (No Recoil)", "No Recoil", "تثبيت الكاميرا أثناء الضرب", "Reduces camera recoil kick", function() return S.noRecoilEnabled end, function(v) S.noRecoilEnabled = v end)
+makeSlider(aimRight, 150, "قوة منع الارتداد", "Recoil Damp", 0.1, 1, 0.05, function() return S.noRecoilStrength end, function(v) S.noRecoilStrength = v end, function(v) return string.format("%.2f", v) end)
 
 -- 2) صفحة الكشف المريح للعين
-local _, visLeft = makeSectionCard(pages.Visual, UDim2.fromOffset(0, 0), UDim2.new(0.56, -6, 1, 0), "عناصر الكشف", "Visual Elements")
-local _, visRight = makeSectionCard(pages.Visual, UDim2.new(0.56, 6, 0, 0), UDim2.new(0.44, -6, 1, 0), "راحة العين والمدى", "Comfort & Range")
+local _, visLeft = makeCard(pages.Visual, UDim2.fromOffset(0, 0), UDim2.new(0.54, -6, 1, 0), "عناصر الكشف", "Visual Elements")
+local _, visRight = makeCard(pages.Visual, UDim2.new(0.54, 6, 0, 0), UDim2.new(0.46, -6, 1, 0), "راحة العين والمدى", "Comfort & Range")
 
-makeSwitchRow(visLeft, 0, "الأسماء والمسافة", "Name & Distance", "ألوان هادئة وواضحة", "Clean readable labels", function() return S.espEnabled end, function(v) S.espEnabled = v; updateEsp() end)
-makeSwitchRow(visLeft, 50, "Player Cham (عبر الجدران)", "Player Cham", "إظهار اللاعب من خلف الجدران", "See players behind walls", function() return S.espCham end, function(v) S.espCham = v; updateEsp() end)
-makeSwitchRow(visLeft, 100, "شريط الصحة الطولي", "Side Health Bar", "شريط عمودي بجانب اللاعب", "Vertical bar beside player", function() return S.espHealthBar end, function(v) S.espHealthBar = v; updateEsp() end)
-makeSwitchRow(visLeft, 150, "إظهار دائرة FOV", "Show FOV Circle", "دائرة المنتصف للتصويب", "Center aim circle", function() return S.espCircle end, function(v) S.espCircle = v; fovCircle.Visible = v end)
+makeSwitch(visLeft, 0, "الأسماء والمسافة", "Name & Distance", "عناوين هادئة وواضحة", "Clean readable tags", function() return S.espEnabled end, function(v) S.espEnabled = v; updateEsp() end)
+makeSwitch(visLeft, 50, "Player Cham (عبر الجدران)", "Player Cham", "إظهار اللاعب من خلف الجدران", "Highlight through walls", function() return S.espCham end, function(v) S.espCham = v; updateEsp() end)
+makeSwitch(visLeft, 100, "شريط الصحة الطولي", "Side Health Bar", "شريط عمودي بجانب اللاعب", "Vertical bar beside player", function() return S.espHealthBar end, function(v) S.espHealthBar = v; updateEsp() end)
+makeSwitch(visLeft, 150, "إظهار دائرة FOV", "Show FOV Circle", "دائرة المنتصف للتصويب", "Center aim circle", function() return S.espCircle end, function(v) S.espCircle = v; fovCircle.Visible = v end)
 
-makeSwitchRow(visRight, 0, "وضع مريح للعين", "Eye Comfort Tone", "ألوان ذهبية هادئة بدون إجهاد", "Soft gold palette for eye comfort", function() return S.safeMode end, function(v) S.safeMode = v; updateEsp() end)
-makeStepperRow(visRight, 50, "أقصى مسافة", "Max Distance", function() return S.maxRange end, function(v) S.maxRange = v end, 50, 100, 2500, function(v) return tostring(v) .. "m" end, function() updateEsp() end)
+makeSwitch(visRight, 0, "وضع مريح للعين", "Eye Comfort Tone", "ألوان ذهبية هادئة بدون إجهاد", "Soft eye-friendly palette", function() return S.eyeComfort end, function(v) S.eyeComfort = v; updateEsp() end)
+makeSlider(visRight, 50, "أقصى مسافة", "Max Distance", 100, 2500, 50, function() return S.maxRange end, function(v) S.maxRange = v end, function(v) return tostring(math.floor(v)) .. "m" end, function() updateEsp() end)
 
 -- 3) صفحة الحركة والقفز
-local _, movCard = makeSectionCard(pages.Movement, UDim2.fromOffset(0, 0), UDim2.fromScale(1, 1), "السرعة ومسافة القفز", "Speed & Jump")
-makeSwitchRow(movCard, 0, "تفعيل السرعة والقفز", "Enable Movement", "تطبيق السرعة والقفز المحددة", "Apply custom speed & jump", function() return S.moveEnabled end, function(v) S.moveEnabled = v; applyMove() end)
-makeStepperRow(movCard, 52, "السرعة (WalkSpeed)", "WalkSpeed", function() return S.walkSpeed end, function(v) S.walkSpeed = v end, 2, 16, 140, function(v) return tostring(v) end, function() applyMove() end)
-makeStepperRow(movCard, 96, "مسافة / قوة القفز", "Jump Power", function() return S.jumpPower end, function(v) S.jumpPower = v end, 5, 50, 240, function(v) return tostring(v) end, function() applyMove() end)
+local _, movCard = makeCard(pages.Movement, UDim2.fromOffset(0, 0), UDim2.fromScale(1, 1), "الحركة والقفز", "Movement")
+makeSwitch(movCard, 0, "تفعيل السرعة والقفز", "Enable Movement", "تطبيق السرعة والقفز المحددة", "Apply speed & jump settings", function() return S.moveEnabled end, function(v) S.moveEnabled = v; applyMove() end)
+makeSlider(movCard, 52, "السرعة (WalkSpeed)", "WalkSpeed", 16, 140, 2, function() return S.walkSpeed end, function(v) S.walkSpeed = v end, function(v) return tostring(math.floor(v)) end, function() applyMove() end)
+makeSlider(movCard, 104, "مسافة / قوة القفز", "Jump Power", 50, 240, 5, function() return S.jumpPower end, function(v) S.jumpPower = v end, function(v) return tostring(math.floor(v)) end, function() applyMove() end)
 
 -- 4) صفحة الهيت بوكس والتريقر بوت
-local _, hbCard = makeSectionCard(pages.Combat, UDim2.fromOffset(0, 0), UDim2.new(0.5, -6, 1, 0), "الهيت بوكس (Hitbox)", "Hitbox")
-local _, trCard = makeSectionCard(pages.Combat, UDim2.new(0.5, 6, 0, 0), UDim2.new(0.5, -6, 1, 0), "التريقر بوت (TriggerBot)", "TriggerBot")
+local _, hbCard = makeCard(pages.Combat, UDim2.fromOffset(0, 0), UDim2.new(0.5, -6, 1, 0), "الهيت بوكس", "Hitbox")
+local _, trCard = makeCard(pages.Combat, UDim2.new(0.5, 6, 0, 0), UDim2.new(0.5, -6, 1, 0), "التريقر بوت", "TriggerBot")
 
-makeSwitchRow(hbCard, 0, "تفعيل الهيت بوكس", "Enable Hitbox", "توسيع منطقة الإصابة للخصوم", "Expand target root hitbox", function() return S.hitboxEnabled end, function(v) S.hitboxEnabled = v; applyHb() end)
-makeStepperRow(hbCard, 52, "حجم الهيت بوكس", "Hitbox Size", function() return S.hitboxSize end, function(v) S.hitboxSize = v end, 1, 2, 20, function(v) return tostring(v) end, function() applyHb() end)
-makeStepperRow(hbCard, 96, "شفافية الهيت بوكس", "Transparency", function() return S.hitboxTrans end, function(v) S.hitboxTrans = v end, 0.05, 0.25, 0.98, function(v) return string.format("%.2f", v) end, function() applyHb() end)
+makeSwitch(hbCard, 0, "تفعيل الهيت بوكس", "Enable Hitbox", "توسيع منطقة الإصابة للخصوم", "Expand target root hitbox", function() return S.hitboxEnabled end, function(v) S.hitboxEnabled = v; applyHb() end)
+makeSlider(hbCard, 52, "حجم الهيت بوكس", "Hitbox Size", 2, 20, 1, function() return S.hitboxSize end, function(v) S.hitboxSize = v end, function(v) return tostring(math.floor(v)) end, function() applyHb() end)
+makeSlider(hbCard, 104, "شفافية الهيت بوكس", "Transparency", 0.25, 0.98, 0.05, function() return S.hitboxTrans end, function(v) S.hitboxTrans = v end, function(v) return string.format("%.2f", v) end, function() applyHb() end)
 
-makeSwitchRow(trCard, 0, "تفعيل التريقر بوت", "Enable TriggerBot", "إطلاق تلقائي عند التوجيه على خصم", "Auto-fire when target is under aim", function() return S.triggerEnabled end, function(v) S.triggerEnabled = v end)
-makeStepperRow(trCard, 52, "تأخير الإطلاق", "Trigger Delay", function() return S.triggerDelay end, function(v) S.triggerDelay = v end, 0.01, 0, 0.3, function(v) return string.format("%.2fs", v) end)
+makeSwitch(trCard, 0, "تفعيل التريقر بوت", "Enable TriggerBot", "إطلاق تلقائي عند التوجيه على خصم", "Auto-fire when aiming at enemy", function() return S.triggerEnabled end, function(v) S.triggerEnabled = v end)
+makeSlider(trCard, 52, "تأخير الإطلاق", "Trigger Delay", 0, 0.3, 0.01, function() return S.triggerDelay end, function(v) S.triggerDelay = v end, function(v) return string.format("%.2fs", v) end)
 
--- 5) صفحة الإعدادات والحماية
-local _, setCard = makeSectionCard(pages.Settings, UDim2.fromOffset(0, 0), UDim2.fromScale(1, 1), "الحماية والتفضيلات", "Protection & Preferences")
-makeSwitchRow(setCard, 0, "تجاهل نفس الفريق", "Team Check", "عدم استهداف أو كشف أعضاء فريقك", "Ignore teammates", function() return S.teamCheck end, function(v) S.teamCheck = v; updateEsp() end)
+-- 5) صفحة الإعدادات
+local _, setCard = makeCard(pages.Settings, UDim2.fromOffset(0, 0), UDim2.fromScale(1, 1), "الإعدادات", "Settings")
+makeSwitch(setCard, 0, "تجاهل نفس الفريق", "Team Check", "عدم استهداف أو كشف أعضاء فريقك", "Ignore teammates", function() return S.teamCheck end, function(v) S.teamCheck = v; updateEsp() end)
 
-local noteLbl = Instance.new("TextLabel")
-noteLbl.BackgroundTransparency = 1
-noteLbl.Position = UDim2.fromOffset(8, 56)
-noteLbl.Size = UDim2.new(1, -16, 0, 90)
-noteLbl.Font = Enum.Font.Gotham
-noteLbl.TextSize = 11
-noteLbl.TextColor3 = P.sub
-noteLbl.TextWrapped = true
-noteLbl.TextXAlignment = Enum.TextXAlignment.Left
-noteLbl.Parent = setCard
+local infoLbl = Instance.new("TextLabel")
+infoLbl.BackgroundTransparency = 1
+infoLbl.Position = UDim2.fromOffset(8, 56)
+infoLbl.Size = UDim2.new(1, -16, 0, 80)
+infoLbl.Font = Enum.Font.Gotham
+infoLbl.TextSize = 11
+infoLbl.TextColor3 = C.muted
+infoLbl.TextWrapped = true
+infoLbl.TextXAlignment = Enum.TextXAlignment.Left
+infoLbl.Parent = setCard
 
 registerRefresh(function()
-	noteLbl.Text = T(
-		"• F1 لإخفاء أو إظهار الواجهة.\n• تم استخدام أسماء عشوائية وتنظيف كامل للاتصالات والعناصر لتقليل البصمات الظاهرة على العميل.",
-		"• F1 toggles the UI.\n• Randomized naming and full cleanup reduce client-side footprints."
+	saveBtn.Text = T("حفظ", "Save")
+	infoLbl.Text = T(
+		"• اضغط زر (حفظ) في الأعلى لحفظ تفعيلاتك وإعداداتك.\n• اضغط F1 لإخفاء أو إظهار القائمة.",
+		"• Click Save in the top bar to store your toggles & settings.\n• Press F1 to toggle the menu."
 	)
 end)
+
+hook(saveBtn.MouseButton1Click:Connect(function()
+	local saved = saveConfig()
+	saveBtn.Text = saved and T("تم الحفظ", "Saved") or T("حفظ", "Save")
+	task.delay(1.2, function()
+		if isRunning and saveBtn then
+			saveBtn.Text = T("حفظ", "Save")
+		end
+	end)
+end))
 
 -- إدخال الأزرار وتسجيل زر الأيم بوت
 hook(UserInputService.InputBegan:Connect(function(input, processed)
@@ -1133,7 +1212,7 @@ end))
 hook(langBtn.MouseButton1Click:Connect(function()
 	S.lang = (S.lang == "AR") and "EN" or "AR"
 	langBtn.Text = (S.lang == "AR") and "AR / EN" or "EN / AR"
-	for _, fn in ipairs(uiRefreshers) do
+	for _, fn in ipairs(refreshers) do
 		fn()
 	end
 end))
@@ -1151,10 +1230,10 @@ local function unload()
 	if screenGui and screenGui.Parent then
 		screenGui:Destroy()
 	end
-	env.ALASHBAT_BAT_UNLOAD = nil
+	env.ALASHBAT_GOTHAM_UNLOAD = nil
 end
 
-env.ALASHBAT_BAT_UNLOAD = unload
+env.ALASHBAT_GOTHAM_UNLOAD = unload
 hook(closeBtn.MouseButton1Click:Connect(unload))
 hook(screenGui.Destroying:Connect(unload))
 
@@ -1220,7 +1299,7 @@ task.spawn(function()
 	end
 end)
 
-for _, fn in ipairs(uiRefreshers) do
+for _, fn in ipairs(refreshers) do
 	fn()
 end
 setPage("Aimbot")
