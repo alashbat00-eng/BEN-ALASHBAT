@@ -44,7 +44,10 @@ local GUI_NAME = randId("G_")
 local TAG_NAME = randId("T_")
 local CHAM_NAME = randId("C_")
 local CONFIG_FOLDER = "AlashbatGothamCfg"
-local CONFIG_FILE = "settings.json"
+local CONFIG_PATHS = {
+	CONFIG_FOLDER .. "/settings.json",
+	"AlashbatGotham_settings.json"
+}
 
 local S = {
 	lang = "AR", -- "AR" | "EN"
@@ -94,34 +97,79 @@ local function T(ar, en)
 	return S.lang == "AR" and ar or en
 end
 
-local function saveConfig()
-	local ok = false
-	pcall(function()
-		if makefolder and isfolder and not isfolder(CONFIG_FOLDER) then
-			makefolder(CONFIG_FOLDER)
+local function applyDecodedSettings(decoded)
+	if typeof(decoded) ~= "table" then return false end
+	for k, v in pairs(decoded) do
+		if S[k] ~= nil and type(v) == type(S[k]) then
+			S[k] = v
 		end
-		if writefile then
-			writefile(CONFIG_FOLDER .. "/" .. CONFIG_FILE, HttpService:JSONEncode(S))
-			ok = true
-		end
-	end)
-	return ok
+	end
+	return true
 end
 
-local function loadConfig()
+local function saveConfig()
+	local payload = HttpService:JSONEncode(S)
+	env.ALASHBAT_SAVED_CONFIG = payload
+
+	local fileSaved = false
 	pcall(function()
-		if not readfile then return end
-		local path = CONFIG_FOLDER .. "/" .. CONFIG_FILE
-		if isfile and not isfile(path) then return end
-		local decoded = HttpService:JSONDecode(readfile(path))
-		if typeof(decoded) == "table" then
-			for k, v in pairs(decoded) do
-				if S[k] ~= nil and typeof(v) == typeof(S[k]) then
-					S[k] = v
-				end
+		if typeof(makefolder) == "function" then
+			local hasFolder = false
+			if typeof(isfolder) == "function" then
+				local okF, resF = pcall(isfolder, CONFIG_FOLDER)
+				hasFolder = (okF and resF == true)
+			end
+			if not hasFolder then
+				pcall(makefolder, CONFIG_FOLDER)
 			end
 		end
 	end)
+
+	if typeof(writefile) == "function" then
+		for _, p in ipairs(CONFIG_PATHS) do
+			local okW = pcall(writefile, p, payload)
+			if okW then
+				fileSaved = true
+			end
+		end
+	end
+
+	return fileSaved, true
+end
+
+local function loadConfig()
+	local loaded = false
+
+	if typeof(readfile) == "function" then
+		for _, p in ipairs(CONFIG_PATHS) do
+			local exists = true
+			if typeof(isfile) == "function" then
+				local okEx, resEx = pcall(isfile, p)
+				exists = (okEx and resEx == true)
+			end
+			if exists then
+				local okR, raw = pcall(readfile, p)
+				if okR and type(raw) == "string" and #raw > 2 then
+					local okJ, decoded = pcall(function()
+						return HttpService:JSONDecode(raw)
+					end)
+					if okJ and applyDecodedSettings(decoded) then
+						loaded = true
+						break
+					end
+				end
+			end
+		end
+	end
+
+	if not loaded and type(env.ALASHBAT_SAVED_CONFIG) == "string" then
+		local okJ, decoded = pcall(function()
+			return HttpService:JSONDecode(env.ALASHBAT_SAVED_CONFIG)
+		end)
+		if okJ then
+			applyDecodedSettings(decoded)
+		end
+	end
 end
 
 loadConfig()
@@ -557,7 +605,6 @@ local function applyAimbot(cam)
 	local camGoal = CFrame.lookAt(cam.CFrame.Position, targetPart.Position)
 	cam.CFrame = cam.CFrame:Lerp(camGoal, alpha)
 
-	-- لف شخصية اللاعب فعلياً نحو الهدف حتى يتطابق اتجاه الضرب مع الكاميرا
 	local myChar = LocalPlayer.Character
 	local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
 	local focusPos = targetRoot and targetRoot.Position or targetPart.Position
@@ -569,7 +616,6 @@ local function applyAimbot(cam)
 		end
 	end
 
-	-- تحريك مؤشر الماوس نحو إحداثي الهدف على الشاشة عندما يعتمد السلاح على موضع الماوس
 	local proj, onScreen = cam:WorldToViewportPoint(targetPart.Position)
 	if onScreen and proj.Z > 0 and typeof(mousemoverel) == "function" then
 		local curMouse = UserInputService:GetMouseLocation()
@@ -650,7 +696,6 @@ do
 	end))
 end
 
--- الشريط الجانبي الأيسر
 local sidebar = Instance.new("Frame")
 sidebar.BackgroundColor3 = C.sideBg
 sidebar.Position = UDim2.fromOffset(12, 12)
@@ -718,7 +763,6 @@ brandSub.TextSize = 10
 brandSub.TextXAlignment = Enum.TextXAlignment.Left
 brandSub.Parent = headerCard
 
--- المنطقة اليمنى
 local mainArea = Instance.new("Frame")
 mainArea.BackgroundTransparency = 1
 mainArea.Position = UDim2.fromOffset(214, 12)
@@ -736,7 +780,7 @@ stroke(topStrip, C.line, 1, 0.35)
 local pageTitle = Instance.new("TextLabel")
 pageTitle.BackgroundTransparency = 1
 pageTitle.Position = UDim2.fromOffset(14, 0)
-pageTitle.Size = UDim2.new(1, -210, 1, 0)
+pageTitle.Size = UDim2.new(1, -230, 1, 0)
 pageTitle.Font = Enum.Font.GothamBold
 pageTitle.TextSize = 14
 pageTitle.TextColor3 = C.text
@@ -744,11 +788,11 @@ pageTitle.TextXAlignment = Enum.TextXAlignment.Left
 pageTitle.Parent = topStrip
 
 local saveBtn = Instance.new("TextButton")
-saveBtn.Size = UDim2.fromOffset(82, 26)
-saveBtn.Position = UDim2.new(1, -196, 0.5, -13)
+saveBtn.Size = UDim2.fromOffset(102, 26)
+saveBtn.Position = UDim2.new(1, -216, 0.5, -13)
 saveBtn.BackgroundColor3 = C.cardBg
 saveBtn.Font = Enum.Font.GothamBold
-saveBtn.TextSize = 11
+saveBtn.TextSize = 10
 saveBtn.TextColor3 = C.ok
 saveBtn.Parent = topStrip
 round(saveBtn, 6)
@@ -888,7 +932,6 @@ local function makeSwitch(parent, y, titleAr, titleEn, subAr, subEn, getFn, setF
 	return sync
 end
 
--- شريط سحب حقيقي (Slider) بدلاً من أزرار البلس والماينس
 local function makeSlider(parent, y, titleAr, titleEn, minV, maxV, step, getFn, setFn, fmtFn, onChanged)
 	local wrap = Instance.new("Frame")
 	wrap.BackgroundColor3 = C.rowBg
@@ -1039,7 +1082,7 @@ for i, item in ipairs(navItems) do
 	end))
 end
 
--- 1) صفحة الأيم بوت (توجيه حقيقي + لف الشخصية + مواءمة الماوس + تسجيل زر + شرائح سحب)
+-- 1) صفحة الأيم بوت
 local _, aimLeft = makeCard(pages.Aimbot, UDim2.fromOffset(0, 0), UDim2.new(0.54, -6, 1, 0), "الأيم بوت", "Aimbot")
 local _, aimRight = makeCard(pages.Aimbot, UDim2.new(0.54, 6, 0, 0), UDim2.new(0.46, -6, 1, 0), "إعدادات التتبع والارتداد", "Aim & Recoil Settings")
 
@@ -1154,20 +1197,27 @@ infoLbl.TextWrapped = true
 infoLbl.TextXAlignment = Enum.TextXAlignment.Left
 infoLbl.Parent = setCard
 
+local saveStatusNote = ""
 registerRefresh(function()
-	saveBtn.Text = T("حفظ", "Save")
+	if saveStatusNote ~= "" then
+		saveBtn.Text = saveStatusNote
+	else
+		saveBtn.Text = T("حفظ التفعيلات", "Save Config")
+	end
 	infoLbl.Text = T(
-		"• اضغط زر (حفظ) في الأعلى لحفظ تفعيلاتك وإعداداتك.\n• اضغط F1 لإخفاء أو إظهار القائمة.",
-		"• Click Save in the top bar to store your toggles & settings.\n• Press F1 to toggle the menu."
+		"• اضغط (حفظ التفعيلات) لحفظ كل التفعيلات والعدادات.\n• اضغط F1 لإخفاء أو إظهار القائمة.",
+		"• Click Save Config to store all toggles & sliders.\n• Press F1 to toggle the menu."
 	)
 end)
 
 hook(saveBtn.MouseButton1Click:Connect(function()
-	local saved = saveConfig()
-	saveBtn.Text = saved and T("تم الحفظ", "Saved") or T("حفظ", "Save")
-	task.delay(1.2, function()
-		if isRunning and saveBtn then
-			saveBtn.Text = T("حفظ", "Save")
+	local fileSaved = saveConfig()
+	saveStatusNote = fileSaved and T("تم الحفظ ✓", "Saved ✓") or T("حُفظ بالجلسة ✓", "Session Saved ✓")
+	saveBtn.Text = saveStatusNote
+	task.delay(1.5, function()
+		if isRunning then
+			saveStatusNote = ""
+			saveBtn.Text = T("حفظ التفعيلات", "Save Config")
 		end
 	end)
 end))
@@ -1303,4 +1353,9 @@ for _, fn in ipairs(refreshers) do
 	fn()
 end
 setPage("Aimbot")
+win.Visible = S.menuOpen
+fovCircle.Visible = S.espCircle
+fovCircle.Size = UDim2.fromOffset(S.aimFov * 2, S.aimFov * 2)
+if S.moveEnabled then applyMove() end
+if S.hitboxEnabled then applyHb() end
 updateEsp()
